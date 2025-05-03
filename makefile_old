@@ -1,0 +1,33 @@
+TARGET := main
+BUILD := build
+SOURCES := .
+INCLUDES := -I. -I/opt/devkitpro/libgba/include
+
+ARCH := -mthumb -mthumb-interwork
+SPECS := -specs=gba.specs
+
+CFLAGS := -O2 -Wall -ffreestanding $(ARCH) $(INCLUDES)
+LDFLAGS := $(ARCH) $(SPECS) -L/opt/devkitpro/libgba/lib -lgba
+
+CC := arm-none-eabi-gcc
+LD := arm-none-eabi-gcc
+OBJCOPY := arm-none-eabi-objcopy
+
+SRCS := $(wildcard $(SOURCES)/*.c)
+OBJS := $(patsubst $(SOURCES)/%.c, $(BUILD)/%.o, $(SRCS))
+
+$(BUILD)/$(TARGET).gba: $(BUILD)/$(TARGET).elf
+	$(OBJCOPY) -O binary $< $@
+
+$(BUILD)/$(TARGET).elf: $(OBJS)
+	mkdir -p $(BUILD)
+	$(LD) $(LDFLAGS) -o $@ $^
+
+$(BUILD)/%.o: $(SOURCES)/%.c
+	mkdir -p $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+all: $(BUILD)/$(TARGET).gba
+
+clean:
+	rm -rf $(BUILD)
