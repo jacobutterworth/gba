@@ -1,17 +1,21 @@
-// First demo. You are not expected to understand it
-// (don't spend too much time trying and read on).
-// But if you do understand (as a newbie): wow!
+#include "toolbox.h"
+
+// extra stuff, also in tonc_video.h
+#define M3_WIDTH SCREEN_WIDTH
+// typedef for a whole mode3 line
+typedef COLOR M3LINE[M3_WIDTH];
+// m3_mem is a matrix; m3_mem[y][x] is pixel (x,y)
+#define m3_mem ((M3LINE *)MEM_VRAM)
 
 int main()
 {
-  *(unsigned int *)0x04000000 = 0x0403;
+  REG_DISPCNT = DCNT_MODE3 | DCNT_BG2;
 
-  ((unsigned short *)0x06000000)[120 + 80 * 240] = 0x001F;
-  ((unsigned short *)0x06000000)[136 + 80 * 240] = 0x03E0;
-  ((unsigned short *)0x06000000)[120 + 96 * 240] = 0x7C00;
+  m3_mem[80][120] = CLR_RED;
+  m3_mem[80][136] = CLR_LIME;
+  m3_mem[96][120] = CLR_BLUE;
 
   while (1)
     ;
-
   return 0;
 }
