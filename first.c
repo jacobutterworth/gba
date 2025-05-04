@@ -10,11 +10,24 @@
 #define KEY_LEFT 0x0020
 #define KEY_UP 0x0040
 #define KEY_DOWN 0x0080
+#define KEY_A 0x0001
 #define KEY_MASK 0x03FF
+
+// Maximum number of ants
+#define MAX_ANTS 10
 
 // Direction vectors for the ant (right, up, left, down)
 const int dx[] = {1, 0, -1, 0};
 const int dy[] = {0, -1, 0, 1};
+
+// Structure to hold ant data
+typedef struct
+{
+  int x;
+  int y;
+  int dir;
+  int active;
+} Ant;
 
 // INLINE is already "static inline"
 INLINE void wait_vblank(void)
@@ -38,15 +51,32 @@ INLINE int key_hit(int key)
   return (~REG_KEYINPUT & key);
 }
 
+// Function to spawn a new ant at a random location
+void spawn_ant(Ant *ants, int index)
+{
+  ants[index].x = rand() % SCREEN_WIDTH;
+  ants[index].y = rand() % SCREEN_HEIGHT;
+  ants[index].dir = rand() % 4;
+  ants[index].active = 1;
+}
+
 int main(void)
 {
   // Mode 3, BG2 on
   REG_DISPCNT = DCNT_MODE3 | DCNT_BG2;
 
-  // Starting position in the middle of the screen
-  int x = SCREEN_WIDTH / 2;
-  int y = SCREEN_HEIGHT / 2;
-  int dir = 1; // Start facing upward
+  // Initialize random number generator
+  srand(REG_VCOUNT);
+
+  // Create array of ants
+  Ant ants[MAX_ANTS] = {0};
+  int num_ants = 1;
+
+  // Initialize first ant in the middle
+  ants[0].x = SCREEN_WIDTH / 2;
+  ants[0].y = SCREEN_HEIGHT / 2;
+  ants[0].dir = 1;
+  ants[0].active = 1;
 
   // Variables to track previous key state
   int prev_keys = 0;
@@ -59,61 +89,97 @@ int main(void)
     int curr_keys = ~REG_KEYINPUT & KEY_MASK;
     int new_presses = curr_keys & ~prev_keys;
 
-    // Handle manual movement
-    if (new_presses & KEY_RIGHT)
+    // Handle A button press - spawn new ant
+    if ((new_presses & KEY_A) && num_ants < MAX_ANTS)
     {
-      x++;
+      spawn_ant(ants, num_ants);
+      num_ants++;
     }
-    else if (new_presses & KEY_LEFT)
-    {
-      x--;
-    }
-    else if (new_presses & KEY_UP)
-    {
-      y--;
-    }
-    else if (new_presses & KEY_DOWN)
-    {
-      y++;
-    }
-    else
-    {
-      // No key pressed - do automatic Langton's Ant movement
-      u16 current_color = m3_get(x, y);
 
-      if (current_color == CLR_BLACK)
+    // Update all active ants
+    for (int i = 0; i < num_ants; i++)
+    {
+      if (!ants[i].active)
+        continue;
+
+      // Handle manual movement for the first ant only
+      if (i == 0)
       {
-        // On black: turn left
-        dir = (dir + 1) % 4;
-        m3_plot(x, y, CLR_WHITE);
+        if (new_presses & KEY_RIGHT)
+        {
+          ants[i].x++;
+        }
+        else if (new_presses & KEY_LEFT)
+        {
+          ants[i].x--;
+        }
+        else if (new_presses & KEY_UP)
+        {
+          ants[i].y--;
+        }
+        else if (new_presses & KEY_DOWN)
+        {
+          ants[i].y++;
+        }
+        else
+        {
+          // No key pressed - do automatic Langton's Ant movement
+          u16 current_color = m3_get(ants[i].x, ants[i].y);
+
+          if (current_color == CLR_BLACK)
+          {
+            // On black: turn left
+            ants[i].dir = (ants[i].dir + 1) % 4;
+            m3_plot(ants[i].x, ants[i].y, CLR_WHITE);
+          }
+          else
+          {
+            // On white/unvisited: turn right
+            ants[i].dir = (ants[i].dir + 3) % 4;
+            m3_plot(ants[i].x, ants[i].y, CLR_BLACK);
+          }
+
+          // Move forward in current direction
+          ants[i].x += dx[ants[i].dir];
+          ants[i].y += dy[ants[i].dir];
+        }
       }
       else
       {
-        // On white/unvisited: turn right
-        dir = (dir + 3) % 4; // same as (dir - 1 + 4) % 4
-        m3_plot(x, y, CLR_BLACK);
+        // Automatic movement for all other ants
+        u16 current_color = m3_get(ants[i].x, ants[i].y);
+
+        if (current_color == CLR_BLACK)
+        {
+          ants[i].dir = (ants[i].dir + 1) % 4;
+          m3_plot(ants[i].x, ants[i].y, CLR_WHITE);
+        }
+        else
+        {
+          ants[i].dir = (ants[i].dir + 3) % 4;
+          m3_plot(ants[i].x, ants[i].y, CLR_BLACK);
+        }
+
+        ants[i].x += dx[ants[i].dir];
+        ants[i].y += dy[ants[i].dir];
       }
 
-      // Move forward in current direction
-      x += dx[dir];
-      y += dy[dir];
-    }
+      // Wrap around screen edges
+      if (ants[i].x < 0)
+        ants[i].x = SCREEN_WIDTH - 1;
+      if (ants[i].x >= SCREEN_WIDTH)
+        ants[i].x = 0;
+      if (ants[i].y < 0)
+        ants[i].y = SCREEN_HEIGHT - 1;
+      if (ants[i].y >= SCREEN_HEIGHT)
+        ants[i].y = 0;
 
-    // Wrap around screen edges
-    if (x < 0)
-      x = SCREEN_WIDTH - 1;
-    if (x >= SCREEN_WIDTH)
-      x = 0;
-    if (y < 0)
-      y = SCREEN_HEIGHT - 1;
-    if (y >= SCREEN_HEIGHT)
-      y = 0;
-
-    // If we moved by key press, flip the color
-    if (new_presses & (KEY_RIGHT | KEY_LEFT | KEY_UP | KEY_DOWN))
-    {
-      u16 current_color = m3_get(x, y);
-      m3_plot(x, y, current_color == CLR_BLACK ? CLR_WHITE : CLR_BLACK);
+      // If we moved first ant by key press, flip the color
+      if (i == 0 && (new_presses & (KEY_RIGHT | KEY_LEFT | KEY_UP | KEY_DOWN)))
+      {
+        u16 current_color = m3_get(ants[i].x, ants[i].y);
+        m3_plot(ants[i].x, ants[i].y, current_color == CLR_BLACK ? CLR_WHITE : CLR_BLACK);
+      }
     }
 
     // Store current key state for next frame
