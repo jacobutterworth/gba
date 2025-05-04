@@ -4,6 +4,10 @@
 // --- missing from your toolbox.h: the VCOUNT register 0x04000006
 #define REG_VCOUNT (*(volatile u16 *)(MEM_IO + 0x0006))
 
+// Direction vectors for the ant (right, up, left, down)
+const int dx[] = {1, 0, -1, 0};
+const int dy[] = {0, -1, 0, 1};
+
 // INLINE is already "static inline"
 INLINE void wait_vblank(void)
 {
@@ -14,46 +18,56 @@ INLINE void wait_vblank(void)
     ;
 }
 
+// Function to get pixel color at (x,y)
+INLINE u16 m3_get(int x, int y)
+{
+  return vid_mem[y * SCREEN_WIDTH + x];
+}
+
 int main(void)
 {
   // Mode 3, BG2 on
   REG_DISPCNT = DCNT_MODE3 | DCNT_BG2;
 
-  // Seed (use a fixed seed for reproducible “random” or better yet hook
-  // into a free-running timer if you want true variability)
-  srand(1234);
-
-  // Starting position
-  int x = 120, y = 80;
-
-  // Draw the first pixel
-  m3_plot(x, y, CLR_RED);
+  // Starting position in the middle of the screen
+  int x = SCREEN_WIDTH / 2;
+  int y = SCREEN_HEIGHT / 2;
+  // Start facing upward (index 1 in our direction arrays)
+  int dir = 1;
 
   while (1)
   {
     wait_vblank();
 
-    // Erase old pixel (draw black)
-    m3_plot(x, y, CLR_BLACK);
+    // Get current cell color
+    u16 current_color = m3_get(x, y);
 
-    // Move by -1, 0 or +1 in each axis
-    int dx = (rand() % 3) - 1;
-    int dy = (rand() % 3) - 1;
-    x += dx;
-    y += dy;
+    if (current_color == CLR_BLACK)
+    {
+      // On black: turn left (add 1 to direction)
+      dir = (dir + 1) % 4;
+      m3_plot(x, y, CLR_WHITE);
+    }
+    else
+    {
+      // On white/unvisited: turn right (subtract 1 from direction)
+      dir = (dir + 3) % 4; // same as (dir - 1 + 4) % 4
+      m3_plot(x, y, CLR_BLACK);
+    }
 
-    // Clamp to [0..SCREEN_WIDTH-1], [0..SCREEN_HEIGHT-1]
+    // Move forward in current direction
+    x += dx[dir];
+    y += dy[dir];
+
+    // Wrap around screen edges
     if (x < 0)
-      x = 0;
-    else if (x >= SCREEN_WIDTH)
       x = SCREEN_WIDTH - 1;
+    if (x >= SCREEN_WIDTH)
+      x = 0;
     if (y < 0)
-      y = 0;
-    else if (y >= SCREEN_HEIGHT)
       y = SCREEN_HEIGHT - 1;
-
-    // Draw new pixel
-    m3_plot(x, y, CLR_RED);
+    if (y >= SCREEN_HEIGHT)
+      y = 0;
   }
 
   return 0;
